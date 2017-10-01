@@ -176,7 +176,7 @@ std::string requestCommandLine(bool showPrompt) {
 }
 
 int shell(bool showPrompt) {
-    while(true){//cin.good()
+    while(cin.good()){//cin.good()
         int rc = 0;
         std::string commandLine = requestCommandLine(showPrompt);
         std::vector<std::string> pipes = parsePipes(commandLine);
@@ -187,7 +187,6 @@ int shell(bool showPrompt) {
         if (rc != 0){
             std::cout << strerror(rc) << std::endl;
         }
-        exit(0);
     }
     return 0;
 }
