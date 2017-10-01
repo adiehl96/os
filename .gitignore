@@ -1,0 +1,7 @@
+build/
+CMakeFiles/
+ext/
+old/
+test-dir
+/CMakeLists.txt
+/CMakeLists.txt.user
