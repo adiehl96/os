@@ -25,30 +25,22 @@
 // although it is good habit, you don't have to type 'std::' before many objects by including this line
 using namespace std;
 
-int status;
-
 // Parses a string to form a vector of arguments. The seperator is a space char (' ').
 std::vector<std::vector<std::string>> parseArguments(const std::vector<std::string>& pipes) {
     std::vector<std::vector<std::string>> retval;
     for (const std::string& str : pipes){
         std::vector<std::string> tempval;
-        std::string tempterm;
         for (int pos = 0; pos < str.length(); ) {
             // look for the next space
             int found = str.find(' ', pos);
             // if no space was found, this is the last word
             if (found == std::string::npos) {
-                tempterm = str.substr(pos);
-                //if ((tempterm.compare("exit"))==0){ exit(0); }
-                tempval.push_back(tempterm);
-
+                tempval.push_back(str.substr(pos));
                 break;
             }
             // filter out consequetive spaces
             if (found != pos)
-                tempterm = str.substr(pos, found-pos);
-                //if ((tempterm.compare("exit"))==0){ exit(0); }
-                tempval.push_back(tempterm);
+                tempval.push_back(str.substr(pos, found-pos));
             pos = found+1;
         }
         retval.push_back(tempval);
@@ -73,7 +65,6 @@ std::vector<std::string> parsePipes(const std::string& str) {
         pos = found+1;
     }
     return retval;
-
 }
 
 // Executes a command with arguments. In case of failure, returns error code.
@@ -134,7 +125,7 @@ int executePipedCommand(const std::vector<std::vector<std::string>>& args, int l
             close(fd[1]);
             dup2(fd[0], STDIN_FILENO);
             executeCommand(args[l]);
-//            std::cout << "error\n";
+            std::cout << "yes\n";
     }
 
     return(0);
@@ -144,7 +135,7 @@ int executePipedCommand(const std::vector<std::vector<std::string>>& args, int l
 
 int handleCommand(const std::vector<std::vector<std::string>>& args){
 
-
+    int status;
     pid_t   childpid;
 
     if((childpid = fork()) == -1)
@@ -163,6 +154,7 @@ int handleCommand(const std::vector<std::vector<std::string>>& args){
             exit(0);
         }
     }
+    waitpid(-1, &status, false);
     return(0);
 }
 
@@ -184,18 +176,18 @@ std::string requestCommandLine(bool showPrompt) {
 }
 
 int shell(bool showPrompt) {
-    while(cin.good()){//cin.good()
+    while(true){//cin.good()
         int rc = 0;
         std::string commandLine = requestCommandLine(showPrompt);
         std::vector<std::string> pipes = parsePipes(commandLine);
         std::vector<std::vector<std::string>> argList = parseArguments(pipes);
 
         rc = handleCommand(argList);
-        waitpid(-1, &status, false);
 
         if (rc != 0){
             std::cout << strerror(rc) << std::endl;
         }
+        exit(0);
     }
     return 0;
 }
