@@ -5,3 +5,5 @@ old/
 test-dir
 /CMakeLists.txt
 /CMakeLists.txt.user
+/.test.sh.swo
+/.test.sh.swp

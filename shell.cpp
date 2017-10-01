@@ -73,6 +73,7 @@ std::vector<std::string> parsePipes(const std::string& str) {
         pos = found+1;
     }
     return retval;
+
 }
 
 // Executes a command with arguments. In case of failure, returns error code.
