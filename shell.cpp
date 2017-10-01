@@ -25,6 +25,8 @@
 // although it is good habit, you don't have to type 'std::' before many objects by including this line
 using namespace std;
 
+int status;
+
 // Parses a string to form a vector of arguments. The seperator is a space char (' ').
 std::vector<std::vector<std::string>> parseArguments(const std::vector<std::string>& pipes) {
     std::vector<std::vector<std::string>> retval;
@@ -135,7 +137,7 @@ int executePipedCommand(const std::vector<std::vector<std::string>>& args, int l
 
 int handleCommand(const std::vector<std::vector<std::string>>& args){
 
-    int status;
+
     pid_t   childpid;
 
     if((childpid = fork()) == -1)
@@ -154,7 +156,6 @@ int handleCommand(const std::vector<std::vector<std::string>>& args){
             exit(0);
         }
     }
-    waitpid(-1, &status, false);
     return(0);
 }
 
@@ -183,6 +184,7 @@ int shell(bool showPrompt) {
         std::vector<std::vector<std::string>> argList = parseArguments(pipes);
 
         rc = handleCommand(argList);
+        waitpid(-1, &status, false);
 
         if (rc != 0){
             std::cout << strerror(rc) << std::endl;
