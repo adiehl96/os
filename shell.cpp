@@ -37,12 +37,14 @@ std::vector<std::vector<std::string>> parseArguments(const std::vector<std::stri
             int found = str.find(' ', pos);
             // if no space was found, this is the last word
             if (found == std::string::npos) {
+                if (str.substr(pos).compare("exit")==0) { exit(0); }
                 tempval.push_back(str.substr(pos));
                 break;
             }
             // filter out consequetive spaces
             if (found != pos)
                 tempval.push_back(str.substr(pos, found-pos));
+                if (str.substr(pos, found-pos).compare("exit")==0) { exit(0); }
             pos = found+1;
         }
         retval.push_back(tempval);
@@ -92,6 +94,7 @@ int executeCommand(const std::vector<std::string>& args) {
     delete c_args;
 
     return retval;
+    exit(0);
 }
 
 // Executes multiple piped commands with arguments. In case of failure, returns error code.
@@ -127,10 +130,10 @@ int executePipedCommand(const std::vector<std::vector<std::string>>& args, int l
             close(fd[1]);
             dup2(fd[0], STDIN_FILENO);
             executeCommand(args[l]);
-            std::cout << "yes\n";
+            std::cout << "error\n";
     }
 
-    return(0);
+    exit(0);
 
 }
 
