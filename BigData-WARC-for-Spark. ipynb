@@ -1,0 +1,333 @@
+{
+  "metadata" : {
+    "name" : "WARC-for-Spark",
+    "user_save_timestamp" : "1970-01-01T00:00:00.000Z",
+    "auto_save_timestamp" : "1970-01-01T00:00:00.000Z",
+    "language_info" : {
+      "name" : "scala",
+      "file_extension" : "scala",
+      "codemirror_mode" : "text/x-scala"
+    },
+    "trusted" : true,
+    "customLocalRepo" : null,
+    "customRepos" : null,
+    "customDeps" : null,
+    "customImports" : null,
+    "customArgs" : null,
+    "customSparkConf" : null
+  },
+  "cells" : [ {
+    "metadata" : {
+      "id" : "D265A9CB8A6844B8B1F3ABBC963E010B"
+    },
+    "cell_type" : "markdown",
+    "source" : "## WARC for Spark\n\nThis notebook will help you get started on developing code to analyze WARC files in Spark inside Spark Notebook.\n\nOnce the code seems ready, you can use _Download as scala_ from the File menu, and continue to develop it into the standalone application to be submitted using `spark-submit`; see specifically the [course instructions on self-contained apps](http://rubigdata.github.io/course/background/sbt.html)."
+  }, {
+    "metadata" : {
+      "id" : "FEFBC1DB256544618CA6B32B4148897E"
+    },
+    "cell_type" : "markdown",
+    "source" : "### Preparations: external dependencies\n\nWe will use external libraries to parse WARC files (provided by SurfSara) and to parse noisy HTML (using a java version of Beautiful Soup).\n\nThe three cells below setup the environment.\n\n_An alternative approach is to download the `jar` files yourself and use the `:cp` directive to add those to the classpath._"
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "C7E1A15F003A46888C305BB10D278AF1"
+    },
+    "cell_type" : "code",
+    "source" : ":remote-repo com.github.sara-nl % default % https://jitpack.io % maven",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab2070156606-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "9B24FAE065144DF2A08A1072CB2B5E5F"
+    },
+    "cell_type" : "code",
+    "source" : ":dp \"com.github.sara-nl\" % \"warcutils\" % \"-SNAPSHOT\"",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab27722197-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "591E58C4109D42B08A4798B66CF6CD7D"
+    },
+    "cell_type" : "code",
+    "source" : ":dp \"org.jsoup\" % \"jsoup\" % \"1.9.2\"\n    \"org.jwat\"          % \"jwat-common\"    % \"1.0.0\"\n    \"org.jwat\"          % \"jwat-warc\"      % \"1.0.0\"\n    \"org.jwat\"          % \"jwat-gzip\"      % \"1.0.0\"",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "71292B77687F4C8686F3A20FFC2695CC"
+    },
+    "cell_type" : "code",
+    "source" : "import nl.surfsara.warcutils.WarcInputFormat\nimport org.jwat.warc.{WarcConstants, WarcRecord}\n\nimport org.apache.hadoop.io.LongWritable;\n\nimport org.apache.commons.lang.StringUtils;",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "id" : "D63217B6616F426BAFB141711EA54987"
+    },
+    "cell_type" : "markdown",
+    "source" : "Using Spark, classes may need to be shipped between different nodes in the cluster, which involves their _serialization_.\n\nIf you get errors that classes are not serializable, add those to the `.set` commands below - \nwhich involves a reset of the notebook, so existing variables will not exist any more."
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "BB7AD47C3322483D9F94C85B925D3601"
+    },
+    "cell_type" : "code",
+    "source" : "// Adapt the SparkConf to use Kryo and register the classes used through reset parameter lastChanges (a function)\n//import org.apache.spark.{Logging, SparkConf}\nimport org.apache.spark.SparkConf\nreset( lastChanges= _.\n      set( \"spark.serializer\", \"org.apache.spark.serializer.KryoSerializer\" ).\n      set( \"spark.kryo.classesToRegister\", \n          \"org.apache.hadoop.io.LongWritable,\" +\n          \"org.jwat.warc.WarcRecord,\" +\n          \"org.jwat.warc.WarcHeader\" )\n      )",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "output_stream_collapsed" : true,
+      "collapsed" : false,
+      "id" : "C120FD0D7DBF4C848E4F3548BD8157DA"
+    },
+    "cell_type" : "code",
+    "source" : "// Checking that configuration was successfully adapted\nsc.getConf.toDebugString",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "id" : "49A814DBF5E145D1B4875C0D48836CEA"
+    },
+    "cell_type" : "markdown",
+    "source" : "### Use WARC contents\n\nLet us load some WARC file and carry out a few analyses."
+  }, {
+    "metadata" : {
+      "id" : "CB57B6CBAD374BD68D64156A0A591274"
+    },
+    "cell_type" : "markdown",
+    "source" : "Assign `warcfile` an example WARC file to work with; I used `wget` to create a WARC file from the course website, see e.g. [the final assignment](http://rubigdata.github.io/course/assignments/P-commoncrawl.html)."
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "9F165CBC4A87403E8E5D2EDCBE276AC9"
+    },
+    "cell_type" : "code",
+    "source" : "val warcfile = \"/data/bigdata/course.warc.gz\"",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "id" : "4332DA09A72C45A8894A277517DBDD60"
+    },
+    "cell_type" : "markdown",
+    "source" : "Now initialize an RDD from `warcfile` using the `WarcInputFormat` parser provided by `nl.surfsara.warcutils`:"
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "1A6531D58586481A8786182813314331"
+    },
+    "cell_type" : "code",
+    "source" : "val warcf = sc.newAPIHadoopFile(\n              warcfile,\n              classOf[WarcInputFormat],               // InputFormat\n              classOf[LongWritable],                  // Key\n              classOf[WarcRecord]                     // Value\n    )",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "id" : "BFCE6E86DAEE45D4A42ADF22EF9E29AF"
+    },
+    "cell_type" : "markdown",
+    "source" : "**Note:**\nMy initial approach was to cache the constructed RDD; unfortunately, doing this interacts _somehow_ (I do not exactly understand why yet) with the inner workings of the `WarcRecord` classes, resulting in `java.io.IOException: Stream closed` errors when operating on the payloads in these WarcRecords.\n\nI resorted to defining `warc` as a cached version, after an identity transform, and `warcc` as a transformation of `warcf` that already extracted the contents.\nIn your own code, try to ensure that you filter the stream as much as possible before accessing the contents though (so do not build on the `warcc` result if you are not using all records)."
+  }, {
+    "metadata" : {
+      "id" : "919432546CBD4CE1842C3F51C4C960A4"
+    },
+    "cell_type" : "markdown",
+    "source" : "#### Using header info only"
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "0DDD0F12BAAA4D8294ACE23627AAADC0"
+    },
+    "cell_type" : "code",
+    "source" : "val warc = warcf.map{wr => wr}.cache()",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "B1686784CCBC464882FE1B9239B4273E"
+    },
+    "cell_type" : "code",
+    "source" : "val nHTML = warc.count()",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab1201913832-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "BF3D40F75FF24058A23E93D140D43E60"
+    },
+    "cell_type" : "code",
+    "source" : "// WarcRecords header type info\nwarc.map{ wr => wr._2.header }.\nmap{ h => (h.warcTypeIdx, h.warcTypeStr) }.take(10)\n",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab2014867277-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "87625ED014A6419B8773E94CF456B986"
+    },
+    "cell_type" : "code",
+    "source" : "// Get responses with their size\nwarc.map{ wr => wr._2.header }.\n     filter{ _.warcTypeIdx == 2 /* response */ }.\n     map{ h => (h.warcTargetUriStr, h.contentLength, h.contentType.toString) }.collect",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab67877132-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "BF3D40F75FF24058A23E93D140D43E60"
+    },
+    "cell_type" : "code",
+    "source" : "// WarcRecords with responses that gave a 404:\nwarc.map{ wr => wr._2 }.\n     filter{ _.header.warcTypeIdx == 2 /* response */ }.\n     filter{ _.getHttpHeader().statusCode == 404 }.\n     map{ wr => wr.header.warcTargetUriStr }. collect() ",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab423682289-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "ABBEAAF54B7A458193C0D72FFDD65DBA"
+    },
+    "cell_type" : "code",
+    "source" : "// WarcRecords corresponding to HTML responses:\nwarc.map{ wr => wr._2 }.\n     filter{ _.header.warcTypeIdx == 2 /* response */ }.\n     filter{ _.getHttpHeader().contentType.startsWith(\"text/html\") }.\n     map{ wr => (wr.header.warcTargetUriStr, wr.getHttpHeader().contentType) }. collect()",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "id" : "990D5ADA200C474380253A6B9F590BEB"
+    },
+    "cell_type" : "markdown",
+    "source" : "#### Using contents\n\nDefine a utility function to get access to the Payload, i.e., the actual contents of the WarcRecords."
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "4958D15002214C868E827DC9C9E2BB62"
+    },
+    "cell_type" : "code",
+    "source" : "import java.io.InputStreamReader;\ndef getContent(record: WarcRecord):String = {\n  val cLen = record.header.contentLength.toInt\n  //val cStream = record.getPayload.getInputStreamComplete()\n  val cStream = record.getPayload.getInputStream()\n  val content = new java.io.ByteArrayOutputStream();\n\n  val buf = new Array[Byte](cLen)\n  \n  var nRead = cStream.read(buf)\n  while (nRead != -1) {\n    content.write(buf, 0, nRead)\n    nRead = cStream.read(buf)\n  }\n\n  cStream.close()\n  \n  content.toString(\"UTF-8\");\n}",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "339B180EF2C64EABA1A7234A6F7284BE"
+    },
+    "cell_type" : "code",
+    "source" : "// Taking a substring to avoid messing up the rendering of results in the Notebook - would need proper handling\nval warcc = warcf.\n  filter{ _._2.header.warcTypeIdx == 2 /* response */ }.\n  filter{ _._2.getHttpHeader().contentType.startsWith(\"text/html\") }.\n  map{wr => (wr._2.header.warcTargetUriStr, StringUtils.substring(getContent(wr._2), 0, 256))}.cache()",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab337399741-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "447EC545A2AF435ABED89DD4BA2BC2F6"
+    },
+    "cell_type" : "code",
+    "source" : "warcc.take(10)",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "id" : "A0B66F5E6CE941D884B468FF10AB8468"
+    },
+    "cell_type" : "markdown",
+    "source" : "### Example: Use Jsoup to convert HTML to Text\n\n[Jsoup](https://jsoup.org/) is a widely used library to clean HTML.\n\n**Note:**\n_Libraries can be \"automagically\" included using the special `:dp` directive; discussed briefly in more detail at the bottom of this notebook. Alternatively, copy the right `jar` into the docker image's filesystem yourself, and use the `:cp` directive like above._"
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "F1AE1CD93D414A6982DE97A087221372"
+    },
+    "cell_type" : "code",
+    "source" : "import java.io.IOException;\nimport org.jsoup.Jsoup;\ndef HTML2Txt(content: String) = {\n  try {\n    Jsoup.parse(content).text().replaceAll(\"[\\\\r\\\\n]+\", \" \")\n  }\n  catch {\n    case e: Exception => throw new IOException(\"Caught exception processing input row \", e)\n  }\n}",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "id" : "FCD5B5D5946E495F8FAF966478E3FCC6"
+    },
+    "cell_type" : "code",
+    "source" : "val warcc = warcf.\n  filter{ _._2.header.warcTypeIdx == 2 /* response */ }.\n  filter{ _._2.getHttpHeader().contentType.startsWith(\"text/html\") }.\n  map{wr => ( wr._2.header.warcTargetUriStr, HTML2Txt(getContent(wr._2)) )}.cache()",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : false,
+      "presentation" : {
+        "tabs_state" : "{\n  \"tab_id\": \"#tab105469047-0\"\n}",
+        "pivot_chart_state" : "{\n  \"hiddenAttributes\": [],\n  \"menuLimit\": 200,\n  \"cols\": [],\n  \"rows\": [],\n  \"vals\": [],\n  \"exclusions\": {},\n  \"inclusions\": {},\n  \"unusedAttrsVertical\": 85,\n  \"autoSortUnusedAttrs\": false,\n  \"inclusionsInfo\": {},\n  \"aggregatorName\": \"Count\",\n  \"rendererName\": \"Table\"\n}"
+      },
+      "id" : "848A5B7C4D844219B68C982B16BD8ABF"
+    },
+    "cell_type" : "code",
+    "source" : "warcc.map{ tt => (tt._1, StringUtils.substring(tt._2, 0, 128))}.take(10)",
+    "outputs" : [ ]
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : true,
+      "id" : "084233519C25460F9B19E898B20278C3"
+    },
+    "cell_type" : "markdown",
+    "source" : "### Final words\n\nNow it is time to continue to develop your own project.\n\nDo not worry about a _\"required\"_ level of success; it does not have to be a publishable study!\nIt is perfectly fine if you only realize no more than rather simple standalone program that executes on the cluster\nbut does not run on the complete crawl, or uses only header information. \n\n**Even simple tasks are challenging when carried out on large data!**\n\nDo not be too ambitious, and make progress step by step.\n\nThe examples presented in this notebook are meant to be helpful, but they are by no means complete and have not been tested thoroughly on actual data.\nYou may encounter weird problems, complex enough such that there exists no immediate answer on StackExchange.\n\nI hope the course provided enough background on Spark to spot what the cause of the problem might be;\nhowever, if you spend more than say two to three hours on analyzing \nand debugging a challenge, I recommend to give up and modify your objective - consider a different (simpler) project and only scale up later on\n(provided there is still time left).\n\n_If you cannot solve a problem, definitely do call out by creating a new issue on the Forum - maybe one of us knows the answer already!_\n\n"
+  }, {
+    "metadata" : {
+      "trusted" : true,
+      "input_collapsed" : false,
+      "collapsed" : true,
+      "id" : "E279BF23D60C46138E9AD4FA400CE8BD"
+    },
+    "cell_type" : "code",
+    "source" : "",
+    "outputs" : [ ]
+  } ],
+  "nbformat" : 4
+}
